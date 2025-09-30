@@ -1,91 +1,146 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+
+type Advocate = {
+  id?: string | number;
+  firstName: string;
+  lastName: string;
+  city: string;
+  degree: string;
+  specialties: string[];
+  yearsOfExperience: number | string;
+  phoneNumber: string;
+};
 
 export default function Home() {
-  const [advocates, setAdvocates] = useState([]);
-  const [filteredAdvocates, setFilteredAdvocates] = useState([]);
+  const [advocates, setAdvocates] = useState<Advocate[]>([]);
+  const [search, setSearch] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    console.log("fetching advocates...");
-    fetch("/api/advocates").then((response) => {
-      response.json().then((jsonResponse) => {
-        setAdvocates(jsonResponse.data);
-        setFilteredAdvocates(jsonResponse.data);
-      });
-    });
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch("/api/advocates", { cache: "no-store" });
+        if (!res.ok) throw new Error("Failed to load advocates");
+        const json = await res.json();
+        if (!cancelled) {
+          setAdvocates(json.data ?? []);
+        }
+      } catch (e: any) {
+        if (!cancelled) setError(e.message || "Failed to load advocates");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
-  const onChange = (e) => {
-    const searchTerm = e.target.value;
-
-    document.getElementById("search-term").innerHTML = searchTerm;
-
-    console.log("filtering advocates...");
-    const filteredAdvocates = advocates.filter((advocate) => {
+  const filtered = useMemo(() => {
+    const term = search.trim().toLowerCase();
+    if (!term) return advocates;
+    return advocates.filter((a) => {
+      const specialties = Array.isArray(a.specialties) ? a.specialties : [];
       return (
-        advocate.firstName.includes(searchTerm) ||
-        advocate.lastName.includes(searchTerm) ||
-        advocate.city.includes(searchTerm) ||
-        advocate.degree.includes(searchTerm) ||
-        advocate.specialties.includes(searchTerm) ||
-        advocate.yearsOfExperience.includes(searchTerm)
+        a.firstName?.toLowerCase().includes(term) ||
+        a.lastName?.toLowerCase().includes(term) ||
+        a.city?.toLowerCase().includes(term) ||
+        a.degree?.toLowerCase().includes(term) ||
+        specialties.some((s) => s?.toLowerCase().includes(term)) ||
+        String(a.yearsOfExperience ?? "").toLowerCase().includes(term)
       );
     });
+  }, [advocates, search]);
 
-    setFilteredAdvocates(filteredAdvocates);
-  };
+  if (loading) {
+    return (
+      <main style={{ margin: 24 }}>
+        <h1>Solace Advocates</h1>
+        <p>Loading…</p>
+      </main>
+    );
+  }
 
-  const onClick = () => {
-    console.log(advocates);
-    setFilteredAdvocates(advocates);
-  };
+  if (error) {
+    return (
+      <main style={{ margin: 24 }}>
+        <h1>Solace Advocates</h1>
+        <p role="alert" style={{ color: "crimson" }}>
+          {error}
+        </p>
+        <button onClick={() => location.reload()}>Retry</button>
+      </main>
+    );
+  }
 
   return (
-    <main style={{ margin: "24px" }}>
+    <main style={{ margin: 24 }}>
       <h1>Solace Advocates</h1>
-      <br />
-      <br />
-      <div>
-        <p>Search</p>
-        <p>
-          Searching for: <span id="search-term"></span>
-        </p>
-        <input style={{ border: "1px solid black" }} onChange={onChange} />
-        <button onClick={onClick}>Reset Search</button>
+
+      <div style={{ marginTop: 16, display: "flex", gap: 8, alignItems: "center" }}>
+        <label htmlFor="search">Search</label>
+        <input
+          id="search"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Name, city, specialty…"
+          style={{ border: "1px solid #ccc", padding: "6px 8px", minWidth: 280 }}
+        />
+        {search && (
+          <button onClick={() => setSearch("")} aria-label="Clear search">
+            Clear
+          </button>
+        )}
+        <span aria-live="polite" style={{ marginLeft: 12 }}>
+          {search ? `Searching for: “${search}”` : ""}
+        </span>
       </div>
-      <br />
-      <br />
-      <table>
-        <thead>
-          <th>First Name</th>
-          <th>Last Name</th>
-          <th>City</th>
-          <th>Degree</th>
-          <th>Specialties</th>
-          <th>Years of Experience</th>
-          <th>Phone Number</th>
-        </thead>
-        <tbody>
-          {filteredAdvocates.map((advocate) => {
-            return (
+
+      <div style={{ marginTop: 24, overflowX: "auto" }}>
+        <table style={{ borderCollapse: "collapse", width: "100%" }}>
+          <caption className="sr-only">List of advocates</caption>
+          <thead>
+            <tr>
+              <th style={{ textAlign: "left", padding: 8, borderBottom: "1px solid #ddd" }}>First Name</th>
+              <th style={{ textAlign: "left", padding: 8, borderBottom: "1px solid #ddd" }}>Last Name</th>
+              <th style={{ textAlign: "left", padding: 8, borderBottom: "1px solid #ddd" }}>City</th>
+              <th style={{ textAlign: "left", padding: 8, borderBottom: "1px solid #ddd" }}>Degree</th>
+              <th style={{ textAlign: "left", padding: 8, borderBottom: "1px solid #ddd" }}>Specialties</th>
+              <th style={{ textAlign: "left", padding: 8, borderBottom: "1px solid #ddd" }}>Years of Experience</th>
+              <th style={{ textAlign: "left", padding: 8, borderBottom: "1px solid #ddd" }}>Phone Number</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filtered.length === 0 ? (
               <tr>
-                <td>{advocate.firstName}</td>
-                <td>{advocate.lastName}</td>
-                <td>{advocate.city}</td>
-                <td>{advocate.degree}</td>
-                <td>
-                  {advocate.specialties.map((s) => (
-                    <div>{s}</div>
-                  ))}
+                <td colSpan={7} style={{ padding: 16 }}>
+                  No results found.
                 </td>
-                <td>{advocate.yearsOfExperience}</td>
-                <td>{advocate.phoneNumber}</td>
               </tr>
-            );
-          })}
-        </tbody>
-      </table>
+            ) : (
+              filtered.map((a, idx) => (
+                <tr key={a.id ?? `${a.firstName}-${a.lastName}-${idx}`}>
+                  <td style={{ padding: 8, borderBottom: "1px solid #f0f0f0" }}>{a.firstName}</td>
+                  <td style={{ padding: 8, borderBottom: "1px solid #f0f0f0" }}>{a.lastName}</td>
+                  <td style={{ padding: 8, borderBottom: "1px solid #f0f0f0" }}>{a.city}</td>
+                  <td style={{ padding: 8, borderBottom: "1px solid #f0f0f0" }}>{a.degree}</td>
+                  <td style={{ padding: 8, borderBottom: "1px solid #f0f0f0" }}>
+                    {(Array.isArray(a.specialties) ? a.specialties : []).map((s, i) => (
+                      <div key={i}>{s}</div>
+                    ))}
+                  </td>
+                  <td style={{ padding: 8, borderBottom: "1px solid #f0f0f0" }}>{a.yearsOfExperience}</td>
+                  <td style={{ padding: 8, borderBottom: "1px solid #f0f0f0" }}>{a.phoneNumber}</td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
     </main>
   );
 }
